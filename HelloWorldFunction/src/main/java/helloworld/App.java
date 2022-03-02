@@ -1,32 +1,45 @@
 package helloworld;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.stream.Collectors;
-
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
-import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
-import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
+import com.amazonaws.xray.AWSXRay;
+import com.amazonaws.xray.AWSXRayRecorderBuilder;
+import com.amazonaws.xray.entities.Segment;
+import com.amazonaws.xray.entities.Subsegment;
+import com.amazonaws.xray.strategy.sampling.NoSamplingStrategy;
+
+import java.util.Map;
 
 /**
  * Handler for requests to Lambda function.
  */
-public class App implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
+public class App implements RequestHandler<Map<String,Object>, String> {
 
-    public String handleRequest(final Map<String,Object> input, final Context context) {
-        
-        return "OK";
+    public App() {
+        AWSXRayRecorderBuilder builder = AWSXRayRecorderBuilder.standard();
+        builder.withSamplingStrategy(new NoSamplingStrategy());
+        AWSXRay.setGlobalRecorder(builder.build());
     }
 
-    private String getPageContents(String address) throws IOException{
-        URL url = new URL(address);
-        try(BufferedReader br = new BufferedReader(new InputStreamReader(url.openStream()))) {
-            return br.lines().collect(Collectors.joining(System.lineSeparator()));
+    public String handleRequest(Map<String,Object> input, final Context context) {
+        AWSXRay.beginSegment("simpleJavaXrayTest");
+        String output = doSomething();
+        AWSXRay.endSegment();
+        return output;
+    }
+
+    private String doSomething() {
+        Subsegment subsegment = AWSXRay.beginSubsegment("doSomething");
+        try {
+            thrower();
+        } catch (Exception e) {
+            subsegment.addException(e);
         }
+        AWSXRay.endSubsegment();
+        return "here we are";
+    }
+
+    private void thrower() throws Exception {
+        throw new Exception("oops");
     }
 }
